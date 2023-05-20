@@ -12,6 +12,11 @@
 #include <unordered_map>
 #include <numeric>
 #include <string>
+#include <climits>
+#include <queue>
+#include <map>
+
+
 
 constexpr int INFINITE = std::numeric_limits<int>::max();
 
@@ -43,6 +48,9 @@ constexpr int TASK_PROGRESS_PER_TICK = ENERGY_CONSUMPTION_PER_TICK;
 
 constexpr unsigned int SEED = 1;
 constexpr bool SIMULATOR_VERBOSE = true;
+
+//changed !
+int found_task = 0;
 
 enum ObjectType : int
 {
@@ -114,6 +122,9 @@ bool operator!=(const Coord& lhs, const Coord& rhs)
 	return !(lhs == rhs);
 }
 
+std::map <int, Coord> task_coord_pair;
+Coord taskpair[NUM_MAX_TASKS];
+
 namespace std
 {
 	template <>
@@ -171,6 +182,7 @@ std::chrono::high_resolution_clock::time_point get_now() { return std::chrono::h
 void generateMap(Robot* robots, Task* all_tasks, std::unordered_map<Coord, Task*>& uncharted_tasks, std::vector<TaskView>& active_tasks);
 
 void printMap(int);
+void print_Terrein(int type);
 
 void printObjects(const Robot* robots, const Task* all_tasks, int num_tasks);
 
@@ -639,7 +651,15 @@ public:
 		const std::vector<TaskView>& active_tasks,
 		const Robot(&robot_list)[NUM_ROBOT]) override
 	{
+		// Update the schedule when the information is updated
+		// Schedule tasks for robots 2 to 4'
+		int matrix[4][6];
+		std::vector<std::queue<int>> queue = schedule_minmin(active_tasks, matrix,robot_list);
+
+		schedule_drone_Tasks(robot_list);
+
 	}
+
 
 	bool on_task_reached(const int(&known_objects)[MAP_SIZE][MAP_SIZE],
 		const int(&known_terrein)[NUM_RTYPE][MAP_SIZE][MAP_SIZE],
@@ -657,9 +677,668 @@ public:
 		const Robot(&robot_list)[NUM_ROBOT],
 		const Robot& current_robot) override
 	{
-		return static_cast<Action>(rand() % 5);
+		int moving_action = 4;
+		moving_action = schedule_drone_Tasks(robot_list);
+		return static_cast<Action>(moving_action);
 	}
+
+private:
+
+	struct Destination
+	{
+		int x;
+		int y;
+	};
+	
+	int schedule_drone_Tasks(const Robot(&robot_list)[NUM_ROBOT])
+	{
+
+		// Get the current drone from the robot_list
+		const Robot& current_drone_1 = robot_list[0];
+		const Robot& current_drone_2 = robot_list[3];
+		const Robot& current_robot_1 = robot_list[1];
+		const Robot& current_robot_2 = robot_list[2];
+		const Robot& current_robot_3 = robot_list[4];
+		const Robot& current_robot_4 = robot_list[5];
+		int moving_action = 4;
+
+		// if ()
+
+
+		if (current_drone_1.status == IDLE || current_drone_2.status == IDLE) // Robot is curr3ently moving
+		{
+			
+
+			if (current_drone_1.type != RobotType::DRONE || current_drone_2.type != RobotType::DRONE)
+			{
+				std::cout << "Not a drone!" << std::endl;
+				return moving_action;
+			}
+			// Get the destination coordinates of the task
+			const int NUM_DESTINATIONS = 4;
+
+			Destination destinations[NUM_DESTINATIONS] = {
+				{2, 2},
+				{2, MAP_SIZE - 3},
+				{MAP_SIZE - 3, 2},
+				{MAP_SIZE - 3, MAP_SIZE - 3}
+			};
+
+			int shortest_distance_1 = std::numeric_limits<int>::max();
+			int shortest_distance_2 = std::numeric_limits<int>::max();
+			int nearest_destination_index_1 = -1;
+			int second_nearest_destination_index_1 = -1;
+			int nearest_destination_index_2 = -1;
+			int second_nearest_destination_index_2 = -1;
+
+			for (int i = 0; i < NUM_DESTINATIONS; i++)
+			{
+				int distance_1 = calculate_distance(current_drone_1.coord.x, current_drone_1.coord.y,
+					destinations[i].x, destinations[i].y);
+
+				// Update the nearest destination if a closer one is found
+				if (distance_1 < shortest_distance_1)
+				{
+					shortest_distance_1 = distance_1;
+					second_nearest_destination_index_1 = nearest_destination_index_1;
+					nearest_destination_index_1 = i;
+				}
+
+				int distance_2 = calculate_distance(current_drone_2.coord.x, current_drone_2.coord.y,
+					destinations[i].x, destinations[i].y);
+
+				// Update the nearest destination if a closer one is found
+				if (distance_2 < shortest_distance_2)
+				{
+					shortest_distance_2 = distance_2;
+					second_nearest_destination_index_2 = nearest_destination_index_2;
+					nearest_destination_index_2 = i;
+				}
+
+				// check Destination is same
+
+				if (nearest_destination_index_1 == nearest_destination_index_2)
+				{
+					if (shortest_distance_1 < shortest_distance_2)
+					{
+						// if drone 1 is nearer than drone 2 then change the destination of drone 2 for second nearest.
+						nearest_destination_index_2 = second_nearest_destination_index_2;
+					}
+				}
+
+			}
+			// Check if the current drone coord == target coord 
+			if (current_drone_1.coord.x == destinations[nearest_destination_index_1].x && current_drone_1.coord.y == destinations[nearest_destination_index_1].y)
+			{
+				moving_action = move_drone(current_drone_1, destinations[second_nearest_destination_index_1].x, destinations[second_nearest_destination_index_1].y, second_nearest_destination_index_1);
+			
+			}
+			// Move the current drone to the nearest destination
+			else if (nearest_destination_index_1 != -1)
+			{
+				moving_action = move_drone(current_drone_1, destinations[nearest_destination_index_1].x, destinations[nearest_destination_index_1].y, nearest_destination_index_1);
+				/*std::cout << "Drone moved to destination: (" << destinations[nearest_destination_index].x << ", "
+					<< destinations[nearest_destination_index].y << ")" << std::endl;*/
+				
+			}
+			
+			if (current_drone_2.coord.x == destinations[nearest_destination_index_2].x && current_drone_2.coord.y == destinations[nearest_destination_index_2].y)
+			{
+				moving_action = move_drone(current_drone_2, destinations[second_nearest_destination_index_2].x, destinations[second_nearest_destination_index_2].y, second_nearest_destination_index_2);
+			}
+			// Move the current drone to the nearest destination
+			else if (nearest_destination_index_2 != -1)
+			{
+				moving_action = move_drone(current_drone_2, destinations[nearest_destination_index_2].x, destinations[nearest_destination_index_2].y, nearest_destination_index_2);
+				/*std::cout << "Drone moved to destination: (" << destinations[nearest_destination_index].x << ", "
+					<< destinations[nearest_destination_index].y << ")" << std::endl;*/
+
+			} 
+			
+		}
+		
+
+		if (current_drone_1.status == MOVING || current_drone_2.status == MOVING) // Robot is curr3ently moving
+		{
+
+			if (current_drone_1.type != RobotType::DRONE || current_drone_2.type != RobotType::DRONE)
+			{
+				std::cout << "Not a drone!" << std::endl;
+				return moving_action;
+			}
+			// Get the destination coordinates of the task
+			const int NUM_DESTINATIONS = 4;
+
+			Destination destinations[NUM_DESTINATIONS] = {
+				{2, 2},
+				{2, MAP_SIZE - 3},
+				{MAP_SIZE - 3, 2},
+				{MAP_SIZE - 3, MAP_SIZE - 3}
+			};
+
+			int shortest_distance_1 = std::numeric_limits<int>::max();
+			int shortest_distance_2 = std::numeric_limits<int>::max();
+			int nearest_destination_index_1 = -1;
+			int second_nearest_destination_index_1 = -1;
+			int nearest_destination_index_2 = -1;
+			int second_nearest_destination_index_2 = -1;
+
+			for (int i = 0; i < NUM_DESTINATIONS; i++)
+			{
+				int distance_1 = calculate_distance(current_drone_1.coord.x, current_drone_1.coord.y,
+					destinations[i].x, destinations[i].y);
+
+				// Update the nearest destination if a closer one is found
+				if (distance_1 < shortest_distance_1)
+				{
+					shortest_distance_1 = distance_1;
+					second_nearest_destination_index_1 = nearest_destination_index_1;
+					nearest_destination_index_1 = i;
+				}
+
+				int distance_2 = calculate_distance(current_drone_2.coord.x, current_drone_2.coord.y,
+					destinations[i].x, destinations[i].y);
+
+				// Update the nearest destination if a closer one is found
+				if (distance_2 < shortest_distance_2)
+				{
+					shortest_distance_2 = distance_2;
+					second_nearest_destination_index_2 = nearest_destination_index_2;
+					nearest_destination_index_2 = i;
+				}
+
+				// check Destination is same
+
+				if (nearest_destination_index_1 == nearest_destination_index_2)
+				{
+					if (shortest_distance_1 < shortest_distance_2)
+					{
+						// if drone 1 is nearer than drone 2 then change the destination of drone 2 for second nearest.
+						nearest_destination_index_2 = second_nearest_destination_index_2;
+					}
+				}
+
+			}
+			// Check if the current drone coord == target coord 
+			if (current_drone_1.coord.x == destinations[nearest_destination_index_1].x && current_drone_1.coord.y == destinations[nearest_destination_index_1].y)
+			{
+				moving_action = move_drone(current_drone_1, destinations[second_nearest_destination_index_1].x, destinations[second_nearest_destination_index_1].y, second_nearest_destination_index_1);
+			}
+			// Move the current drone to the nearest destination
+			else if (nearest_destination_index_1 != -1)
+			{
+				moving_action = move_drone(current_drone_1, destinations[nearest_destination_index_1].x, destinations[nearest_destination_index_1].y, nearest_destination_index_1);
+				/*std::cout << "Drone moved to destination: (" << destinations[nearest_destination_index].x << ", "
+					<< destinations[nearest_destination_index].y << ")" << std::endl;*/
+
+			}
+			if (current_drone_2.coord.x == destinations[nearest_destination_index_2].x && current_drone_2.coord.y == destinations[nearest_destination_index_2].y)
+			{
+				moving_action = move_drone(current_drone_2, destinations[second_nearest_destination_index_2].x, destinations[second_nearest_destination_index_2].y, second_nearest_destination_index_2);
+			}
+			// Move the current drone to the nearest destination
+			else if (nearest_destination_index_2 != -1)
+			{
+				moving_action = move_drone(current_drone_2, destinations[nearest_destination_index_2].x, destinations[nearest_destination_index_2].y, nearest_destination_index_2);
+				/*std::cout << "Drone moved to destination: (" << destinations[nearest_destination_index].x << ", "
+					<< destinations[nearest_destination_index].y << ")" << std::endl;*/
+
+			}
+
+		}
+		
+
+		return moving_action;
+
+	}
+
+	// Helper function to calculate the Euclidean distance between two points
+	int calculate_distance(int x1, int y1, int x2, int y2)
+	{
+		int dx = x2 - x1;
+		int dy = y2 - y1;
+		return std::sqrt(dx * dx + dy * dy);
+	}
+
+	// Helper function to move the drone to the specified destination
+	
+	int move_drone(const Robot& drone, int destination_x, int destination_y, int nearest_destination_index)
+	{
+		// Your drone movement logic goes here
+		// Update the drone's current position
+		// drone.targetCoord.x = destination_x;
+		// drone.targetCoord.y = destination_y;
+
+		int moving = 4;
+
+		static const Coord actions[5] =
+		{
+			Coord{0, 1},
+			Coord{0, -1},
+			Coord{-1, 0},
+			Coord{1, 0},
+			Coord{0, 0} };
+
+		Coord targetcode;
+
+		if (nearest_destination_index == 1)
+		{
+			
+			if (destination_x < drone.coord.x)
+			{
+				targetcode = drone.coord + actions[static_cast<int>(3)];
+				if (known_object_at(targetcode) == WALL)
+				{
+					if (destination_y < drone.coord.y)
+					{
+						targetcode = drone.coord + actions[static_cast<int>(2)];
+						if (known_object_at(targetcode) == WALL) {
+							moving = 4;
+							
+						}
+						else {
+							moving = 2;
+							
+						}
+					}
+				}
+				else {
+					moving = 3;
+					
+				}
+			}
+			else if (destination_y < drone.coord.y)
+			{
+				targetcode = drone.coord + actions[static_cast<int>(2)];
+				if (known_object_at(targetcode) == WALL)
+				{
+					if (destination_x < drone.coord.x)
+					{
+						targetcode = drone.coord + actions[static_cast<int>(3)];
+						if (known_object_at(targetcode) == WALL){
+							moving = 1;
+							
+						}
+						else {
+							moving = 3;
+							
+						}
+					}
+				}
+				else {
+					moving = 2;
+					
+				}
+			}
+		}
+		else if (nearest_destination_index == 2)
+		{
+
+			if (destination_x < drone.coord.x)
+			{
+				targetcode = drone.coord + actions[static_cast<int>(3)];
+				if (known_object_at(targetcode) == WALL)
+				{
+					if (destination_y > drone.coord.y)
+					{
+						targetcode = drone.coord + actions[static_cast<int>(1)];
+						if (known_object_at(targetcode) == WALL) {
+							moving = 4;
+							
+						}
+						else {
+							moving = 1;
+							
+						}
+					}
+				}
+				else {
+					moving = 3;
+					
+				}
+			}
+			else if (destination_x >= drone.coord.x)
+			{
+				targetcode = drone.coord + actions[static_cast<int>(3)];
+				if (known_object_at(targetcode) == WALL)
+				{
+					if (destination_y > drone.coord.y)
+					{
+						targetcode = drone.coord + actions[static_cast<int>(1)];
+						if (known_object_at(targetcode) == WALL) {
+							moving = 4;
+
+						}
+						else {
+							moving = 1;
+
+						}
+					}
+				}
+				else {
+					moving = 3;
+
+				}
+			}
+			else if (destination_y > drone.coord.y)
+			{
+				targetcode = drone.coord + actions[static_cast<int>(1)];
+				if (known_object_at(targetcode) == WALL)
+				{
+					if (destination_x < drone.coord.x)
+					{
+						targetcode = drone.coord + actions[static_cast<int>(3)];
+						if (known_object_at(targetcode) == WALL) {
+							moving = 2;
+							
+						}
+						else {
+							moving = 3;
+							
+						}
+					}
+				}
+				else {
+					moving = 1;
+				}
+			}
+			else if (destination_y <= drone.coord.y)
+			{
+				targetcode = drone.coord + actions[static_cast<int>(1)];
+				if (known_object_at(targetcode) == WALL)
+				{
+					if (destination_x < drone.coord.x)
+					{
+						targetcode = drone.coord + actions[static_cast<int>(3)];
+						if (known_object_at(targetcode) == WALL) {
+							moving = 2;
+
+						}
+						else {
+							moving = 3;
+
+						}
+					}
+				}
+				else {
+					moving = 1;
+				}
+			}
+		}
+		else if (nearest_destination_index == 3)
+		{
+
+			if (destination_x > drone.coord.x)
+			{
+				targetcode = drone.coord + actions[static_cast<int>(4)];
+				if (known_object_at(targetcode) == WALL)
+				{
+					if (destination_y < drone.coord.y)
+					{
+						targetcode = drone.coord + actions[static_cast<int>(2)];
+						if (known_object_at(targetcode) == WALL) {
+							moving = 1;
+							
+						}
+						else {
+							moving = 2;
+							
+						}
+					}
+				}
+				else {
+					moving = 4;
+					
+				}
+			}
+			else if (destination_y < drone.coord.y)
+			{
+				targetcode = drone.coord + actions[static_cast<int>(2)];
+				if (known_object_at(targetcode) == WALL)
+				{
+					if (destination_x > drone.coord.x)
+					{
+						targetcode = drone.coord + actions[static_cast<int>(4)];
+						if (known_object_at(targetcode) == WALL) {
+							moving = 1;
+							
+						}
+						else {
+							moving = 4;
+							
+						}
+					}
+				}
+				else {
+					moving = 2;
+					
+				}
+			}
+		}
+		else if (nearest_destination_index == 4)
+				{
+
+				if (destination_x > drone.coord.x)
+				{
+					targetcode = drone.coord + actions[static_cast<int>(4)];
+					if (known_object_at(targetcode) == WALL)
+					{
+						if (destination_y > drone.coord.y)
+						{
+							targetcode = drone.coord + actions[static_cast<int>(1)];
+							if (known_object_at(targetcode) == WALL) {
+								moving = 2;
+								
+							}
+							else {
+								moving = 1;
+								
+							}
+						}
+					}
+					else {
+						moving = 4;
+						
+					}
+				}
+				else if (destination_y > drone.coord.y)
+				{
+					targetcode = drone.coord + actions[static_cast<int>(1)];
+					if (known_object_at(targetcode) == WALL)
+					{
+						if (destination_x > drone.coord.x)
+						{
+							targetcode = drone.coord + actions[static_cast<int>(4)];
+							if (known_object_at(targetcode) == WALL) {
+								moving = 2;
+								
+							}
+							else {
+								moving = 4;
+								
+							}
+						}
+					}
+					else {
+						moving = 1;
+						
+					}
+				}
+		}
+		
+		return moving;
+	}
+	
+	std::vector<std::queue<int>> schedule_minmin(const std::vector<TaskView>& active_tasks, int Matrix[4][6], const Robot(&robot_list)[NUM_ROBOT])
+	{
+		int task_N = 6; //active_tasks.size()
+
+		int Num_robots = NUM_ROBOT / 3 * 2;
+
+		// Create a vector of vectors to store the output queue for each robot
+		std::vector<std::queue<int>> output_queue(Num_robots);
+		std::vector<int> completion_time(Num_robots, 0);
+
+
+		// Perform the Min-Min algorithm for each robot
+		for (int p = 0; p < task_N; ++p) {
+
+			int temp_assigned_energy[4] = { 0, 0, 0, 0 };
+
+			int min_task[4] = { -1, -1, -1, -1 };
+			int min_task_energy[4] = { -1, -1, -1, -1 };
+
+			for (int temp_robot = 0; temp_robot < Num_robots; ++temp_robot) {
+
+
+				int min_time = std::numeric_limits<int>::max();
+				int min_task_idx = -1;
+
+				// Find the minimum task for each robot
+				for (int task = 0; task < task_N; ++task) {
+
+					if (Matrix[temp_robot][task] < min_time) {
+						min_time = Matrix[temp_robot][task];
+						min_task_idx = task;
+					}
+				}
+
+				min_task[temp_robot] = min_task_idx;
+				min_task_energy[temp_robot] = min_time;
+
+			}
+
+			// Find the minimum task for all robot
+			int temp_min_time = std::numeric_limits<int>::max();
+
+			int assign_robot = -1;
+			int assign_task = -1;
+
+			for (int robot = 0; robot < 4; ++robot) {
+				if (min_task_energy[robot] < temp_min_time) {
+					assign_robot = robot;
+					assign_task = min_task[robot];
+					temp_min_time = min_task_energy[robot];
+				}
+			}
+
+			if (assign_robot != -1 && assign_task != -1)
+			{
+				output_queue[assign_robot].push(assign_task);
+				completion_time[assign_robot] += temp_min_time;
+			}
+
+			//to do : remove assigned task, update assigned robot's matrix of another task 
+			for (int robot = 0; robot < Num_robots; ++robot) {
+				if (robot == assign_robot) {
+					temp_assigned_energy[robot] += Matrix[robot][assign_task];
+					for (int task = 0; task < task_N; ++task)
+					{
+						if (Matrix[assign_robot][task] != std::numeric_limits<int>::max())
+							Matrix[assign_robot][task] += temp_assigned_energy[robot];
+					}
+
+				}
+				Matrix[robot][assign_task] = std::numeric_limits<int>::max();  // Mark the task as assigned
+			}
+		}
+		// Return the output queue for the first robot
+		return output_queue;
+	}
+
+	std::vector<std::queue<int>> schedule_sufferage(const std::vector<TaskView>& active_tasks, int Matrix[4][6], const Robot(&robot_list)[NUM_ROBOT])
+	{
+		int task_N = 6; //active_tasks.size()
+
+		int Num_robots = NUM_ROBOT / 3 * 2;
+
+		// Create a vector of vectors to store the output queue for each robot
+		std::vector<std::queue<int>> output_queue(Num_robots);
+		std::vector<int> completion_time(Num_robots, 0);
+
+		int temp_assigned_energy[4] = { 0, 0, 0, 0 };
+
+		// Perform the Min-Min algorithm for each robot
+		for (int p = 0; p < task_N; ++p) {
+
+			int min_robot[6] = { -1, -1, -1, -1, -1, -1 };
+			int min_robot_energy[6] = { -1, -1, -1, -1, -1, -1 };
+			int fst_sec_minus[6] = { -1, -1, -1, -1, -1, -1 };
+
+			for (int task = 0; task < task_N; ++task) {
+
+				int min_time = std::numeric_limits<int>::max();
+				int second_min_time = std::numeric_limits<int>::max();
+				int min_robot_idx = -1;
+				int second_min_robot_idx = -1;
+
+				for (int temp_robot = 0; temp_robot < Num_robots; ++temp_robot) {
+
+					if (Matrix[temp_robot][task] < min_time) {
+						second_min_time = min_time;
+						min_time = Matrix[temp_robot][task];
+						second_min_robot_idx = min_robot_idx;
+						min_robot_idx = temp_robot;
+					}
+					else if (Matrix[temp_robot][task] < second_min_time) {
+						second_min_time = Matrix[temp_robot][task];
+						second_min_robot_idx = temp_robot;
+					}
+
+
+				}
+
+
+				fst_sec_minus[task] = min_time - second_min_time;
+
+				min_robot[task] = min_robot_idx;
+				min_robot_energy[task] = min_time;
+
+			}
+
+			// Find the minimum task for all robot
+			int temp_min_time = std::numeric_limits<int>::max();
+			int temp_max_time = -1;
+
+			int assign_robot = -1;
+			int assign_task = -1;
+
+			for (int task = 0; task < 6; ++task) {
+				if (fst_sec_minus[task] < temp_max_time) {
+					assign_robot = min_robot[task];
+					assign_task = task;
+					temp_min_time = min_robot_energy[task];
+					temp_max_time = fst_sec_minus[task];
+				}
+			}
+
+			if (assign_robot != -1 && assign_task != -1)
+			{
+				output_queue[assign_robot].push(assign_task);
+				completion_time[assign_robot] += temp_min_time;
+			}
+
+
+			//to do : remove assigned task, update assigned robot's matrix of another task 
+			for (int robot = 0; robot < Num_robots; ++robot) {
+				if (robot == assign_robot) {
+					temp_assigned_energy[robot] += Matrix[robot][assign_task];
+					for (int task = 0; task < task_N; ++task)
+					{
+						if (Matrix[assign_robot][task] != std::numeric_limits<int>::max())
+							Matrix[assign_robot][task] += temp_assigned_energy[robot];
+					}
+
+				}
+				Matrix[robot][assign_task] = std::numeric_limits<int>::max();  // Mark the task as assigned
+			}
+		}
+		// Return the output queue for the first robot
+		return output_queue;
+	}
+
 };
+
 
 int main()
 {
@@ -911,7 +1590,13 @@ int main()
 	{
 		std::cout << "\t- " << task << std::endl;
 	}
-
+	std::cout << "Found Tasks:" << std::endl;
+	for (int i = 0; i < found_task; i++)
+	{
+		std::cout << "#" << i << " Task at (" << taskpair[i].x << "," << taskpair[i].y << ")" << std::endl;
+	}
+	std::cout << "\n\nKnown Terrein Cost type1\n\n" << std::endl;
+	print_Terrein(1);
 	std::cout << "Time elapsed running algorithm: " << std::chrono::duration_cast<std::chrono::milliseconds>(time_elapsed).count() << " ms" << std::endl;
 
 	return 0;
@@ -994,6 +1679,45 @@ void generateMap(Robot* robots, Task* all_tasks, std::unordered_map<Coord, Task*
 		robots[i].reveal_observed_area(uncharted_tasks, active_tasks);
 }
 
+
+void print_Terrein(int type)      //print found terrein
+{
+	for (int ii = 0; ii < MAP_SIZE; ii++)
+	{
+		for (int jj = 0; jj < MAP_SIZE; jj++)
+		{
+
+			if (objectMatrix[jj][ii] == WALL)
+			{
+				printf(" WALL");
+			}
+			else
+			{
+				printf("%4d ", knownTerrein[type][jj][ii]);
+			}
+
+			if (jj < MAP_SIZE - 1)
+			{
+				printf("| ");
+			}
+		}
+		printf("\n");
+		for (int jj = 0; jj < MAP_SIZE; jj++)
+		{
+			if (ii < MAP_SIZE - 1)
+			{
+				printf("-----");
+				if (jj < MAP_SIZE - 1)
+				{
+					printf("o ");
+				}
+			}
+		}
+		printf("\n");
+	}
+	printf("\n");
+
+}
 /*
  *  prints out maps
  *	paramOBJECT
